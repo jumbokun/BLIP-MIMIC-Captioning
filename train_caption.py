@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from models.blip import blip_decoder
 import utils
 from utils import cosine_lr_schedule
-from data import create_dataset, create_sampler, create_loader
+from blip_dataset import create_dataset, create_sampler, create_loader
 from data.utils import save_result, coco_caption_eval
 
 def train(model, data_loader, optimizer, epoch, device):
@@ -38,7 +38,7 @@ def train(model, data_loader, optimizer, epoch, device):
     header = 'Train Caption Epoch: [{}]'.format(epoch)
     print_freq = 50
 
-    for i, (image, caption, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for i, (image, caption) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         image = image.to(device)       
         
         loss = model(image, caption)      
@@ -93,7 +93,11 @@ def main(args, config):
 
     #### Dataset #### 
     print("Creating captioning dataset")
-    train_dataset, val_dataset, test_dataset = create_dataset('caption_coco', config)  
+    train_dataset, val_dataset, test_dataset = create_dataset(
+        'generation_%s'%args.dataset_name, 
+        args, 
+        config
+    )
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -101,10 +105,15 @@ def main(args, config):
         samplers = create_sampler([train_dataset,val_dataset,test_dataset], [True,False,False], num_tasks, global_rank)         
     else:
         samplers = [None, None, None]
-    
-    train_loader, val_loader, test_loader = create_loader([train_dataset, val_dataset, test_dataset],samplers,
-                                                          batch_size=[config['batch_size']]*3,num_workers=[4,4,4],
-                                                          is_trains=[True, False, False], collate_fns=[None,None,None])         
+
+    train_loader, val_loader, test_loader = create_loader(
+        [train_dataset, val_dataset, test_dataset], 
+        samplers,
+        batch_size=[args.batch_size] * 3,
+        num_workers=[3, 3, 3],
+        is_trains=[True, False, False],
+        collate_fns=[None, None, None]
+    )
 
     #### Model #### 
     print("Creating model")
@@ -192,6 +201,22 @@ if __name__ == '__main__':
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
+    # Data loader settings
+    parser.add_argument('--dataset_name', type=str, default='mimic_cxr', choices=['iu_xray', 'mimic_cxr'],
+                        help='the dataset to be used.')
+    parser.add_argument('--max_seq_length', type=int, default=90, help='the maximum sequence length of the reports.')
+    parser.add_argument('--threshold', type=int, default=3, help='the cut off frequency for the words.')
+    parser.add_argument('--num_workers', type=int, default=2, help='the number of workers for dataloader.')
+    parser.add_argument('--batch_size', type=int, default=2, help='the number of samples for a batch')
+    parser.add_argument('--image_dir', type=str,
+                        default='./dataset/iu_xray/images&./dataset/MIMIC-CXR/files',
+                        help='the path to the directory containing the data.')
+    parser.add_argument('--ann_path', type=str,
+                        default='./annotations/iu-annotation.json&./annotations/mimic_annotation.json',
+                        help='the path to the directory containing the data.')
+    parser.add_argument('--knowledge_path', type=str,
+                        default='./annotations/iu_train_kg_AO.json&./annotations/mimic_train_kg_AO.json',
+                        help='the path to the directory containing the data.')
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
