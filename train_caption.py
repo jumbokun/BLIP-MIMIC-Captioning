@@ -7,7 +7,7 @@
 '''
 import argparse
 import os
-import ruamel_yaml as yaml
+import ruamel.yaml as yaml
 import numpy as np
 import random
 import time
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=2, help='the number of workers for dataloader.')
     parser.add_argument('--batch_size', type=int, default=2, help='the number of samples for a batch')
     parser.add_argument('--image_dir', type=str,
-                        default='./dataset/iu_xray/images&./dataset/MIMIC-CXR/files',
+                        default='./dataset/iu_xray/images&./dataset/mimic_crx/physionet.org/files/mimic-cxr/2.0.0/files',
                         help='the path to the directory containing the data.')
     parser.add_argument('--ann_path', type=str,
                         default='./annotations/iu-annotation.json&./annotations/mimic_annotation.json',
