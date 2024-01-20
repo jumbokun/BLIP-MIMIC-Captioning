@@ -49,13 +49,13 @@ nice_user = False
 # Choose if jobs should run on cluster or workstation nodes. If unset jobs will run on each available node. Options are "cluster" or "workstations"
 # required GPU RAM (MB)
 # requirements = (POOL=="cluster") && (GPURAM>17000) && (TARGET.Machine != "gauss.lfb.rwth-aachen.de")
-requirements = (POOL=="cluster") && (GPURAM>21000) && (TARGET.Machine != "gauss.lfb.rwth-aachen.de")
+requirements = (POOL=="cluster") && (GPURAM>21000)
  
 # required CPU RAM
-request_memory = 20 GB
+request_memory = 50 GB
 
 # required number of CPU cores
-request_cpus = 4
+request_cpus = 1
 
 # required number of GPUs
 request_gpus = 2
@@ -68,7 +68,7 @@ request_gpus = 2
 # deferral_time = (CurrentTime + 1)
 
 # Job Batch Name
-JobBatchName = "blip_mimic_20"
+JobBatchName = "blip_mimic_25"
 
 ######################################################################
 # Further preferences
@@ -90,6 +90,6 @@ notification  = Always
 # number of executions of this job
 queue 1 arguments from (
 # --batch_size 15 --output_dir ./output/mimic_cxr_batch_size_15
---batch_size 20 --output_dir ./output/mimic_cxr_batch_size_20
---batch_size 30 --output_dir ./output/mimic_cxr_batch_size_30
+# --batch_size 20 --output_dir ./output/mimic_cxr_batch_size_20
+--batch_size 25 --output_dir ./output/mimic_cxr_batch_size_25_g2_gauss
 )

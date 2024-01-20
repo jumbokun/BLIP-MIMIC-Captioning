@@ -10,6 +10,8 @@ annotations/mimic_train_kg_AO.json
 /records/generated_records/*.json
 /results/test/*
 /results/fair/*
+output/
+log/
 
 # Python files to ignore
 *.pyc

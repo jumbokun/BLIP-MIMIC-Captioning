@@ -28,6 +28,8 @@ from utils import cosine_lr_schedule
 from blip_dataset import create_dataset, create_sampler, create_loader
 from data.utils import save_result, coco_caption_eval
 
+DEBUG = True
+
 def train(model, data_loader, optimizer, epoch, device):
     # train
     model.train()  
@@ -50,6 +52,9 @@ def train(model, data_loader, optimizer, epoch, device):
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
+        if DEBUG:
+            break
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger.global_avg())     
@@ -63,18 +68,22 @@ def evaluate(model, data_loader, device, config):
     
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Caption generation:'
-    print_freq = 10
+    print_freq = 100
 
     result = []
     for image, image_id in metric_logger.log_every(data_loader, print_freq, header): 
-        
         image = image.to(device)       
-        
         captions = model.generate(image, sample=False, num_beams=config['num_beams'], max_length=config['max_length'], 
                                   min_length=config['min_length'])
-        
         for caption, img_id in zip(captions, image_id):
-            result.append({"image_id": img_id.item(), "caption": caption})
+            if isinstance(img_id, str):
+                image_id = img_id
+            else:
+                image_id = img_id.item()
+            result.append({"image_id": image_id, "caption": caption})
+        
+        if DEBUG:
+            break
   
     return result
 
@@ -151,6 +160,7 @@ def main(args, config):
         test_result_file = save_result(test_result, args.result_dir, 'test_epoch%d'%epoch, remove_duplicate='image_id')  
 
         if utils.is_main_process():   
+            import pdb; pdb.set_trace()
             coco_val = coco_caption_eval(config['coco_gt_root'],val_result_file,'val')
             coco_test = coco_caption_eval(config['coco_gt_root'],test_result_file,'test')
             
