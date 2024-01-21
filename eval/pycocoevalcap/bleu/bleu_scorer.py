@@ -26,10 +26,9 @@ def precook(s, n=4, out=False):
     """Takes a string as input and returns an object that can be given to
     either cook_refs or cook_test. This is optional: cook_refs and cook_test
     can take string arguments as well."""
-    import pdb; pdb.set_trace()
-    if type(words) is str:
+    if type(s) is str:
         words = s.split()
-    if type(words) is list:
+    if type(s) is list:
         words = s[0].split()
     counts = defaultdict(int)
     for k in range(1,n+1):

@@ -200,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_seq_length', type=int, default=90, help='the maximum sequence length of the reports.')
     parser.add_argument('--threshold', type=int, default=3, help='the cut off frequency for the words.')
     parser.add_argument('--num_workers', type=int, default=2, help='the number of workers for dataloader.')
-    parser.add_argument('--batch_size', type=int, default=2, help='the number of samples for a batch')
+    parser.add_argument('--batch_size', type=int, default=16, help='the number of samples for a batch')
     parser.add_argument('--image_dir', type=str,
                         default='./dataset/iu_xray/images&./dataset/MIMIC-CXR/files',
                         help='the path to the directory containing the data.')
