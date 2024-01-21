@@ -134,6 +134,6 @@ class generation_eval(Dataset):
         image = Image.fromarray(ds_image).convert('RGB')
         image = self.transform(image)
 
-        caption = pre_caption(ann['report'], 90)
-
-        return image, caption
+        img_id = ann['id']
+        caption = ann['report']
+        return image, caption, img_id

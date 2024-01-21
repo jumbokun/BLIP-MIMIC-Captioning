@@ -21,14 +21,15 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 from models.blip import blip_decoder
 import utils
 from utils import cosine_lr_schedule
 from blip_dataset import create_dataset, create_sampler, create_loader
 from data.utils import save_result, coco_caption_eval
-
-DEBUG = True
+from eval.metrics import compute_scores
+DEBUG = False
 
 def train(model, data_loader, optimizer, epoch, device):
     # train
@@ -71,21 +72,15 @@ def evaluate(model, data_loader, device, config):
     print_freq = 100
 
     result = []
-    for image, image_id in metric_logger.log_every(data_loader, print_freq, header): 
+    gt = []
+    for image, caption, image_id in metric_logger.log_every(data_loader, print_freq, header): 
         image = image.to(device)       
-        captions = model.generate(image, sample=False, num_beams=config['num_beams'], max_length=config['max_length'], 
+        generated_caption = model.generate(image, sample=False, num_beams=config['num_beams'], max_length=config['max_length'], 
                                   min_length=config['min_length'])
-        for caption, img_id in zip(captions, image_id):
-            if isinstance(img_id, str):
-                image_id = img_id
-            else:
-                image_id = img_id.item()
-            result.append({"image_id": image_id, "caption": caption})
-        
-        if DEBUG:
-            break
+        gt.extend(caption)
+        result.extend(generated_caption)
   
-    return result
+    return result, gt
 
 
 def main(args, config):
@@ -141,7 +136,8 @@ def main(args, config):
             
     best = 0
     best_epoch = 0
-
+    metric = compute_scores
+    writer = SummaryWriter()
     print("Start training")
     start_time = time.time()    
     for epoch in range(0, config['max_epoch']):
@@ -153,47 +149,34 @@ def main(args, config):
                 
             train_stats = train(model, train_loader, optimizer, epoch, device) 
         
-        val_result = evaluate(model_without_ddp, val_loader, device, config)  
-        val_result_file = save_result(val_result, args.result_dir, 'val_epoch%d'%epoch, remove_duplicate='image_id')        
+        val_res, val_gts= evaluate(model_without_ddp, val_loader, device, config)  
+        # val_result_file = save_result(val_result, args.result_dir, 'val_epoch%d'%epoch, remove_duplicate='image_id')        
   
-        test_result = evaluate(model_without_ddp, test_loader, device, config)  
-        test_result_file = save_result(test_result, args.result_dir, 'test_epoch%d'%epoch, remove_duplicate='image_id')  
+        test_res, test_gts = evaluate(model_without_ddp, test_loader, device, config)  
+        # test_result_file = save_result(test_result, args.result_dir, 'test_epoch%d'%epoch, remove_duplicate='image_id')  
 
         if utils.is_main_process():   
-            import pdb; pdb.set_trace()
-            coco_val = coco_caption_eval(config['coco_gt_root'],val_result_file,'val')
-            coco_test = coco_caption_eval(config['coco_gt_root'],test_result_file,'test')
-            
-            if args.evaluate:            
-                log_stats = {**{f'val_{k}': v for k, v in coco_val.eval.items()},
-                             **{f'test_{k}': v for k, v in coco_test.eval.items()},                       
-                            }
-                with open(os.path.join(args.output_dir, "evaluate.txt"),"a") as f:
-                    f.write(json.dumps(log_stats) + "\n")                   
-            else:             
-                save_obj = {
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'config': config,
-                    'epoch': epoch,
-                }
+            val_met = metric({i: [gt] for i, gt in enumerate(val_gts)},
+                                    {i: [re] for i, re in enumerate(val_res)})
+            writer.add_scalar("data/b1/val", val_met['BLEU_1'], epoch)
+            writer.add_scalar("data/b2/val", val_met['BLEU_2'], epoch)
+            writer.add_scalar("data/b3/val", val_met['BLEU_3'], epoch)
+            writer.add_scalar("data/b4/val", val_met['BLEU_4'], epoch)
+            # writer.add_scalar("data/met/val", val_met['METEOR'], epoch)
+            writer.add_scalar("data/rou/val", val_met['ROUGE_L'], epoch)
+            writer.add_scalar("data/cid/val", val_met['CIDER'], epoch)
 
-                if coco_val.eval['CIDEr'] + coco_val.eval['Bleu_4'] > best:
-                    best = coco_val.eval['CIDEr'] + coco_val.eval['Bleu_4']
-                    best_epoch = epoch                
-                    torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_best.pth')) 
-                    
-                log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                             **{f'val_{k}': v for k, v in coco_val.eval.items()},
-                             **{f'test_{k}': v for k, v in coco_test.eval.items()},                       
-                             'epoch': epoch,
-                             'best_epoch': best_epoch,
-                            }
-                with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-                    f.write(json.dumps(log_stats) + "\n")     
-                    
-        if args.evaluate: 
-            break
+            test_met = metric({i: [gt] for i, gt in enumerate(test_gts)},
+                                        {i: [re] for i, re in enumerate(test_res)})
+            writer.add_scalar("data/b1/test", test_met['BLEU_1'], epoch)
+            writer.add_scalar("data/b2/test", test_met['BLEU_2'], epoch)
+            writer.add_scalar("data/b3/test", test_met['BLEU_3'], epoch)
+            writer.add_scalar("data/b4/test", test_met['BLEU_4'], epoch)
+            # writer.add_scalar("data/met/test", test_met['METEOR'], epoch)
+            writer.add_scalar("data/rou/test", test_met['ROUGE_L'], epoch)
+            writer.add_scalar("data/cid/test", test_met['CIDER'], epoch)
+            writer.close()
+
         dist.barrier()     
 
     total_time = time.time() - start_time
@@ -219,7 +202,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=2, help='the number of workers for dataloader.')
     parser.add_argument('--batch_size', type=int, default=2, help='the number of samples for a batch')
     parser.add_argument('--image_dir', type=str,
-                        default='./dataset/iu_xray/images&./dataset/mimic_crx/physionet.org/files/mimic-cxr/2.0.0/files',
+                        default='./dataset/iu_xray/images&./dataset/MIMIC-CXR/files',
                         help='the path to the directory containing the data.')
     parser.add_argument('--ann_path', type=str,
                         default='./annotations/iu-annotation.json&./annotations/mimic_annotation.json',
